@@ -1,0 +1,81 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const int pulsePin = A0;
+const int ledPin = 9;
+
+int threshold = 200;
+int heartRate = 0;
+int lastBeatTime = 0;
+int beatCount = 0;
+unsigned long lastTime = 0;
+
+const int numReadings = 10;
+int readings[numReadings];
+int readIndex = 0;
+int total = 0;
+int average = 0;
+
+bool baselineEstablished = false;
+int baselineValue = 0;
+
+void setup() {
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+  lcd.backlight();
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+
+  for (int i = 0; i < numReadings; i++) {
+    readings[i] = 0;
+  }
+}
+
+void loop() {
+  int sensorValue = analogRead(pulsePin);
+
+  total -= readings[readIndex];
+  readings[readIndex] = sensorValue;
+  total += readings[readIndex];
+  readIndex = (readIndex + 1) % numReadings;
+  average = total / numReadings;
+
+  if (!baselineEstablished) {
+    baselineValue = average;
+    baselineEstablished = true;
+    delay(5000);
+  }
+
+  if (average > baselineValue + threshold) {
+    if (millis() - lastBeatTime > 300) {
+      lastBeatTime = millis();
+      beatCount++;
+    }
+  }
+
+  if (millis() - lastTime >= 1000) {
+    heartRate = beatCount * 60;
+    beatCount = 0;
+    lastTime = millis();
+
+    lcd.setCursor(0, 0);
+    lcd.print("Heart Rate: ");
+    lcd.print(heartRate);
+    lcd.print(" bpm");
+
+    if (heartRate > threshold) {
+      digitalWrite(ledPin, HIGH);
+    } else {
+      digitalWrite(ledPin, LOW);
+    }
+
+    Serial.print("Raw Value: ");
+    Serial.print(sensorValue);
+    Serial.print(" Average: ");
+    Serial.println(average);
+  }
+
+  delay(10);
+}
